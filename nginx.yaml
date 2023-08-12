@@ -1,0 +1,88 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  selector:
+    app: nginx
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30010
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  #replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: aadityarai02/helloworld:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        volumeMounts:
+        - name: shared-volume
+          mountPath: /mnt
+        resources:
+          limits:
+            cpu: "500m"  # Set the CPU limit per replica
+            memory: "500Mi"  # Set the memory limit per replica
+          requests:
+            cpu: "100m"  # Set the CPU request per replica
+            memory: "200Mi"
+      volumes:
+      - name: shared-volume
+        emptyDir: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nginx-log
+  labels:
+    app: nginx
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kubectl
+          image: gcr.io/k8s-minikube/kicbase
+          command: ["kubectl", "cp", "file-copy-deployment:/var/log/nginx/access.log", "/mnt/example.txt"]
+          volumeMounts:
+            - name: shared-volume
+              mountPath: /mnt
+      volumes:
+        - name: shared-volume
+          emptyDir: {}
+---
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  maxReplicas: 4 # maximum replicas of pods
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx # TARGET name of the deployment the autoscaler need to be run on
+  targetCPUUtilizationPercentage: 30
